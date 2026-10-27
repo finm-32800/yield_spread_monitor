@@ -41,7 +41,7 @@ Nothing a run produces is ever committed to `main`.
    `gh-pages` / `/ (root)` > *Save*. Your page appears at
    `https://<your-username>.github.io/<repository>/` a minute later.
 
-From then on the workflow runs by itself every day at 14:30 UTC. Look at
+From then on the workflow runs by itself every day at 22:00 UTC. Look at
 the `monitor-history` branch tomorrow: one more commit, one more line.
 
 ## Run it on your laptop

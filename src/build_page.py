@@ -188,8 +188,8 @@ TEMPLATE = """<!doctype html>
 
   <h2>How this page is made</h2>
   <ol>
-    <li>Every day at 14:30 UTC, a GitHub Actions workflow pulls the newest 10-year and 2-year yields from the
-        FRED API, with an API key stored as a repository secret.</li>
+    <li>Every day at 22:00 UTC, after FRED posts the day's update, a GitHub Actions workflow pulls the newest
+        10-year and 2-year yields from the FRED API, with an API key stored as a repository secret.</li>
     <li>It adds the new days to the history: one CSV of dates and spreads, kept on the repository's
         <code>monitor-history</code> branch, one small commit a day. The <code>main</code> branch holds only code.</li>
     <li>It rebuilds this page and publishes it on the <code>gh-pages</code> branch, which GitHub Pages serves.</li>
