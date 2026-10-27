@@ -93,7 +93,7 @@ def reading_text(history):
     lines = [shape]
     if since is not None:
         state = "above" if spread >= 0 else "below"
-        lines.append(f"It has been {state} zero since {since:%B %-d, %Y}.")
+        lines.append(f"It has been {state} zero since {since:%B} {since.day}, {since:%Y}.")
     if changes:
         lines.append("Change: " + "; ".join(changes) + " (percentage points).")
     return last, lines
@@ -106,17 +106,17 @@ def build_html(history):
     server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
     run_id = os.environ.get("GITHUB_RUN_ID")
     now = datetime.now(timezone.utc)
-    updated = f"{now:%B %-d, %Y at %H:%M} UTC"
+    updated = f"{now:%B} {now.day}, {now:%Y at %H:%M} UTC"
     if run_id:
         updated = f'<a href="{server}/{repo}/actions/runs/{run_id}">{updated}</a>, by a GitHub Actions run'
     recent = history.tail(10).iloc[::-1]
     rows = "\n".join(
-        f"<tr><td>{r.date:%a, %b %-d, %Y}</td><td class='num'>{r.spread:+.2f}</td></tr>" for r in recent.itertuples()
+        f"<tr><td>{r.date:%a, %b} {r.date.day}, {r.date:%Y}</td><td class='num'>{r.spread:+.2f}</td></tr>" for r in recent.itertuples()
     )
     chart = fig.to_html(full_html=False, include_plotlyjs="cdn", config={"displaylogo": False, "responsive": True})
     first = history["date"].iloc[0]
     return TEMPLATE.format(
-        value=f"{last['spread']:+.2f}", as_of=f"{last['date']:%B %-d, %Y}",
+        value=f"{last['spread']:+.2f}", as_of=f"{last['date']:%B} {last['date'].day}, {last['date']:%Y}",
         reading="".join(f"<p>{escape(line)}</p>" for line in lines),
         chart=chart, first=f"{first:%B %Y}", days=f"{len(history):,}", rows=rows,
         updated=updated, repo_url=f"{server}/{repo}", repo=escape(repo),
