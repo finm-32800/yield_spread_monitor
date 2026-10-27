@@ -1,0 +1,118 @@
+name: Build and Deploy the Yield Spread Monitor
+
+# The daily monitor. Every day at 14:30 UTC this workflow restores the
+# history from the monitor-history branch, runs the tests, runs
+# `doit latest` (pull the last ten days from FRED, add them to the history,
+# rebuild the page), records the history on its branch again, and publishes
+# the page.
+#
+# Three branches, one job each:
+#   main             the code. This workflow never writes to it.
+#   monitor-history  one file, spread_history.csv: the only thing carried
+#                    from one day's run to the next. One small commit a day.
+#   gh-pages         the built page, which GitHub Pages serves. One commit,
+#                    replaced on every run.
+#
+# One-time setup, in your own PUBLIC copy of this repository:
+#   1. Settings > Secrets and variables > Actions > New repository secret:
+#      FRED_API_KEY = your key (https://fredaccount.stlouisfed.org/apikeys)
+#   2. Actions > Backfill the Yield Spread History > Run workflow
+#   3. Actions > Build and Deploy the Yield Spread Monitor > Run workflow
+#   4. Settings > Pages > Deploy from a branch > gh-pages / (root)
+#
+# Cron fields: minute hour day-of-month month day-of-week, always in UTC.
+on:
+  schedule:
+    - cron: '30 14 * * *'
+  workflow_dispatch: {}  # the "Run workflow" button
+  push:
+    branches: [main]
+
+# The job pushes two branches, monitor-history and gh-pages.
+permissions:
+  contents: write
+
+# A second run waits for the first instead of pushing at the same time.
+concurrency:
+  group: yield-spread-monitor
+  cancel-in-progress: false
+
+jobs:
+  update-and-deploy:
+    # A copy made from the template starts with a commit named "Initial
+    # commit", which runs this workflow before you have added the secret.
+    # Skip that one run.
+    if: github.event.head_commit.message != 'Initial commit'
+    runs-on: ubuntu-latest
+    env:
+      HISTORY_BRANCH: monitor-history
+      HISTORY_FILE: spread_history.csv
+
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v5
+
+      - name: Restore the history from the monitor-history branch
+        # The runner starts empty every morning. The history is the one thing
+        # carried over from yesterday: fetch its branch by name and read the
+        # file out of it with `git show`. The very first run has no branch,
+        # and the history starts with the days this run pulls.
+        run: |
+          mkdir -p _output
+          if git fetch --quiet origin "$HISTORY_BRANCH:$HISTORY_BRANCH" 2>/dev/null; then
+            git show "$HISTORY_BRANCH:$HISTORY_FILE" > "_output/$HISTORY_FILE"
+            echo "Restored $(( $(wc -l < "_output/$HISTORY_FILE") - 1 )) days from $HISTORY_BRANCH"
+          else
+            echo "No $HISTORY_BRANCH branch yet: the history starts with this run"
+          fi
+
+      - name: Set up uv
+        # `uv run` installs Python 3.12 and the locked dependencies.
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Run the tests
+        # A monitor that fails its own tests publishes nothing.
+        run: uv run pytest
+
+      - name: Update the monitor (pull the last ten days, add them to the history)
+        # The key comes from the repository's secret store, never from this
+        # file. If the data fail their checks (src/update_history.py), this
+        # step fails, nothing below runs, and yesterday's page stays up.
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: uv run doit latest
+
+      - name: Record the history on the monitor-history branch
+        # A second working directory on the history branch (`git worktree`),
+        # outside the checkout. Copy the file in, commit it, push. No new
+        # days (a weekend) means no commit. This push does not start the
+        # workflow again: it listens to pushes on main only.
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          HISTORY="$RUNNER_TEMP/history"
+          if git show-ref --quiet "refs/heads/$HISTORY_BRANCH"; then
+            git worktree add "$HISTORY" "$HISTORY_BRANCH"
+          else
+            git worktree add --orphan -b "$HISTORY_BRANCH" "$HISTORY"
+          fi
+          cp "_output/$HISTORY_FILE" "$HISTORY/"
+          cd "$HISTORY"
+          git add "$HISTORY_FILE"
+          git diff --cached --quiet || git commit -m "History through $(tail -n 1 "$HISTORY_FILE" | cut -d, -f1)"
+          git push origin "$HISTORY_BRANCH"
+
+      - name: Publish the page on gh-pages (one orphan commit, force-pushed)
+        # An orphan branch has no parents, so gh-pages always holds exactly
+        # one commit: today's page replaces yesterday's.
+        run: |
+          cp -r docs "$RUNNER_TEMP/site"
+          git checkout --orphan gh-pages
+          git rm -rf --quiet .
+          git clean -fdx --quiet
+          cp -r "$RUNNER_TEMP/site/." .
+          git add -A
+          git commit -m "Publish $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push --force origin gh-pages

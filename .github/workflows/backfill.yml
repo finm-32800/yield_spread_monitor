@@ -1,0 +1,73 @@
+name: Backfill the Yield Spread History
+
+# Run by hand from the Actions tab: Run workflow, then a start date. It
+# pulls every day from that date to today in one FRED request, adds them to
+# the history on the monitor-history branch, and stops. The next run of the
+# daily workflow publishes them, or press Run workflow on it.
+#
+# This is plain `doit`, the default pipeline, with START_DATE set. Run it
+# once after you add the secret, and again if the history ever has a gap.
+on:
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: "Backfill from this date (YYYY-MM-DD). The 2-year yield starts on 1976-06-01."
+        required: true
+        default: "1976-06-01"
+        type: string
+
+permissions:
+  contents: write
+
+# The same group as the daily workflow, so the two never push at once.
+concurrency:
+  group: yield-spread-monitor
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    env:
+      HISTORY_BRANCH: monitor-history
+      HISTORY_FILE: spread_history.csv
+
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v5
+
+      - name: Restore the history from the monitor-history branch
+        run: |
+          mkdir -p _output
+          if git fetch --quiet origin "$HISTORY_BRANCH:$HISTORY_BRANCH" 2>/dev/null; then
+            git show "$HISTORY_BRANCH:$HISTORY_FILE" > "_output/$HISTORY_FILE"
+            echo "Restored $(( $(wc -l < "_output/$HISTORY_FILE") - 1 )) days from $HISTORY_BRANCH"
+          else
+            echo "No $HISTORY_BRANCH branch yet: the history starts with this backfill"
+          fi
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Backfill (pull every day from the start date, add them to the history)
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          START_DATE: ${{ inputs.start_date }}
+        run: uv run doit
+
+      - name: Record the history on the monitor-history branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          HISTORY="$RUNNER_TEMP/history"
+          if git show-ref --quiet "refs/heads/$HISTORY_BRANCH"; then
+            git worktree add "$HISTORY" "$HISTORY_BRANCH"
+          else
+            git worktree add --orphan -b "$HISTORY_BRANCH" "$HISTORY"
+          fi
+          cp "_output/$HISTORY_FILE" "$HISTORY/"
+          cd "$HISTORY"
+          git add "$HISTORY_FILE"
+          git diff --cached --quiet || git commit -m "Backfill from ${{ inputs.start_date }}, through $(tail -n 1 "$HISTORY_FILE" | cut -d, -f1)"
+          git push origin "$HISTORY_BRANCH"

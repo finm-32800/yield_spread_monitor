@@ -1,0 +1,11 @@
+# Outputs: everything a run produces. None of it is ever committed to main.
+_data/
+_output/
+docs/
+.doit-db*
+
+# Secrets and environments
+.env
+.venv/
+__pycache__/
+.pytest_cache/
