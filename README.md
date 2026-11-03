@@ -33,8 +33,9 @@ Nothing a run produces is ever committed to `main`.
    variables* > *Actions* > *New repository secret*. Name: `FRED_API_KEY`.
    Value: your key. It goes nowhere else: not in a file, not in a commit.
 4. **Backfill the history.** *Actions* > *Backfill the Yield Spread
-   History* > *Run workflow*, with the default start date. About a minute.
-   This creates the `monitor-history` branch.
+   History* > *Run workflow*. It pulls the window committed in
+   `src/settings.py`. About a minute. This creates the `monitor-history`
+   branch.
 5. **Publish.** *Actions* > *Build and Deploy the Yield Spread Monitor* >
    *Run workflow*. About a minute. This creates the `gh-pages` branch.
 6. **Turn on Pages.** *Settings* > *Pages* > *Deploy from a branch* >
@@ -51,12 +52,22 @@ The project uses [uv](https://docs.astral.sh/uv/), which installs Python
 
 ```bash
 cp .env.example .env              # then paste your FRED key into .env
-uv run doit                       # the backfill: pull everything, build the history and the page
+uv run doit                       # the backfill: pull START_DATE..END_DATE, build the history and the page
 uv run doit latest                # the daily update: pull the last ten days
-START_DATE=2020-01-01 uv run doit # backfill from a date (the pull reruns when the window changes)
 uv run pytest                     # the tests, offline, about a second
 open docs/index.html              # the page
 ```
+
+The window the backfill pulls, `START_DATE` to `END_DATE`, is committed in
+`src/settings.py`, not read from `.env`: two people with different `.env`
+files who build the same commit must get the same bytes. `.env` holds
+secrets and machine facts; anything that changes what is computed lives in
+a committed file. To backfill from another date, move `START_DATE` and
+commit; the pull runs again whenever the window changes. `END_DATE` is the
+cutoff of the backfill. The daily update reaches back ten days from the day
+it runs, so if `END_DATE` is more than ten days old when you first
+backfill, move it to today in the same commit, or the history has a gap and
+the checks stop the run.
 
 ## Files
 
@@ -65,10 +76,10 @@ open docs/index.html              # the page
 | `src/pull_yields.py` | Pulls DGS10 and DGS2 from the FRED API (`--latest`: the last ten days) |
 | `src/update_history.py` | Computes the spread, adds the new days to the history, and checks the history before anything publishes |
 | `src/build_page.py` | Builds `docs/index.html` from the history alone |
-| `src/settings.py` | Reads the key and the dates from `.env` or the environment |
+| `src/settings.py` | Reads the key from `.env` or the environment; the window, `START_DATE` to `END_DATE`, is a committed constant |
 | `dodo.py` | The tasks: `doit` (the backfill) and `doit latest` (the daily update) |
 | `.github/workflows/deploy_pages.yml` | The daily job: restore the history, test, update, record, publish |
-| `.github/workflows/backfill.yml` | The backfill, run by hand with a start date |
+| `.github/workflows/backfill.yml` | The backfill, run by hand, over the committed window |
 | `src/test_monitor.py` | Unit tests and the check that the key comes from the secret store |
 
 ## Data and terms

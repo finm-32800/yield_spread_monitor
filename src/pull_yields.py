@@ -1,7 +1,7 @@
 """Pull the 10-year and 2-year Treasury yields from the FRED API.
 
-    python src/pull_yields.py            # START_DATE to END_DATE (the backfill)
-    python src/pull_yields.py --latest   # the last LATEST_DAYS days (the daily update)
+    python src/pull_yields.py            # START_DATE to END_DATE, the window committed in settings.py (the backfill)
+    python src/pull_yields.py --latest   # the last LATEST_DAYS days, through today (the daily update)
 
 Both series come from the Federal Reserve Board's H.15 release and are in the
 public domain. FRED's own spread series, T10Y2Y, is tagged as copyrighted,
@@ -17,6 +17,7 @@ import pandas as pd
 import requests
 
 import settings
+from settings import END_DATE, START_DATE
 
 FRED_URL = "https://api.stlouisfed.org/fred/series/observations"
 SERIES = {"DGS10": "y10", "DGS2": "y2"}
@@ -75,7 +76,7 @@ if __name__ == "__main__":
     if args.latest:
         start, end = (date.today() - timedelta(days=LATEST_DAYS)).isoformat(), date.today().isoformat()
     else:
-        start, end = settings.START_DATE, settings.END_DATE
+        start, end = START_DATE, END_DATE  # the committed window, never today's date
     yields = pull_yields(start, end, settings.FRED_API_KEY)
     settings.DATA_DIR.mkdir(exist_ok=True)
     yields.to_csv(settings.YIELDS_CSV, index=False)

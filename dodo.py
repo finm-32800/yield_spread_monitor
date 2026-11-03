@@ -1,11 +1,14 @@
 """The monitor's tasks. Plain `doit` is the backfill; `doit latest` is the daily update.
 
-    uv run doit           # pull START_DATE..END_DATE (all of it, by default), update the history, build the page
+    uv run doit           # pull START_DATE..END_DATE, the window committed in src/settings.py; update the history; build the page
     uv run doit latest    # pull the last ten days, update the history, build the page
     uv run doit list      # list the tasks
 
-Every task reads and writes only `_data/`, `_output/`, and `docs/`, which are
-gitignored. Nothing a run produces is ever committed to `main`.
+The window is a commit, never a `.env` entry, so that the commit says what
+was computed: to backfill from another date, move START_DATE in
+`src/settings.py` and commit. Every task reads and writes only `_data/`,
+`_output/`, and `docs/`, which are gitignored. Nothing a run produces is
+ever committed to `main`.
 """
 
 import sys
@@ -25,13 +28,14 @@ DOIT_CONFIG = {
 
 
 def task_pull():
-    """Pull the 10-year and 2-year yields from FRED, START_DATE to END_DATE"""
+    """Pull the 10-year and 2-year yields from FRED over the committed window, START_DATE to END_DATE"""
     return {
         "actions": ["python src/pull_yields.py"],
         "file_dep": ["src/pull_yields.py", "src/settings.py"],
         "targets": [settings.YIELDS_CSV],
         # Pull again when the window changes, not only when the code does:
-        # set START_DATE earlier and `doit` backfills further.
+        # move START_DATE earlier in src/settings.py, commit, and `doit`
+        # backfills further.
         "uptodate": [config_changed({"start": settings.START_DATE, "end": settings.END_DATE})],
     }
 

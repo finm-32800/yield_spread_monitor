@@ -1,20 +1,19 @@
 name: Backfill the Yield Spread History
 
-# Run by hand from the Actions tab: Run workflow, then a start date. It
-# pulls every day from that date to today in one FRED request, adds them to
-# the history on the monitor-history branch, and stops. The next run of the
-# daily workflow publishes them, or press Run workflow on it.
+# Run by hand from the Actions tab: Run workflow. It pulls every day in the
+# window committed in src/settings.py (START_DATE to END_DATE) in one FRED
+# request per series, adds them to the history on the monitor-history
+# branch, and stops. The next run of the daily workflow publishes them, or
+# press Run workflow on it.
 #
-# This is plain `doit`, the default pipeline, with START_DATE set. Run it
-# once after you add the secret, and again if the history ever has a gap.
+# This is plain `doit`, the default pipeline. Run it once after you add the
+# secret, and again if the history ever has a gap: move START_DATE and
+# END_DATE in src/settings.py to cover the gap, commit, push, then press Run
+# workflow. The window is a commit, not an input to the job, so that the
+# commit says what was pulled. The daily job reaches back ten days, so an
+# END_DATE more than ten days old leaves a gap: move it before you backfill.
 on:
   workflow_dispatch:
-    inputs:
-      start_date:
-        description: "Backfill from this date (YYYY-MM-DD). The 2-year yield starts on 1976-06-01."
-        required: true
-        default: "1976-06-01"
-        type: string
 
 permissions:
   contents: write
@@ -50,16 +49,18 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Backfill (pull every day from the start date, add them to the history)
+      - name: Backfill (pull every day in the committed window, add them to the history)
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-          START_DATE: ${{ inputs.start_date }}
         run: uv run doit
 
       - name: Record the history on the monitor-history branch
+        # The commit message names the window that was pulled, read from the
+        # same settings the pull used.
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          WINDOW=$(uv run python -c 'import sys; sys.path.insert(0, "src"); import settings; print(settings.START_DATE, "to", settings.END_DATE)')
           HISTORY="$RUNNER_TEMP/history"
           if git show-ref --quiet "refs/heads/$HISTORY_BRANCH"; then
             git worktree add "$HISTORY" "$HISTORY_BRANCH"
@@ -69,5 +70,5 @@ jobs:
           cp "_output/$HISTORY_FILE" "$HISTORY/"
           cd "$HISTORY"
           git add "$HISTORY_FILE"
-          git diff --cached --quiet || git commit -m "Backfill from ${{ inputs.start_date }}, through $(tail -n 1 "$HISTORY_FILE" | cut -d, -f1)"
+          git diff --cached --quiet || git commit -m "Backfill $WINDOW, history through $(tail -n 1 "$HISTORY_FILE" | cut -d, -f1)"
           git push origin "$HISTORY_BRANCH"

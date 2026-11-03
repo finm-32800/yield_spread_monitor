@@ -1,10 +1,12 @@
 """Tests for the monitor. They run offline, with no API key, in about a second."""
 
+import importlib
 import re
 from pathlib import Path
 
 import pandas as pd
 
+import settings
 from build_page import inverted_spans
 from pull_yields import observations_to_frame
 from update_history import check_history, compute_spread, merge_history
@@ -61,3 +63,16 @@ def test_the_key_comes_from_the_secret_store():
         text = (ROOT / ".github" / "workflows" / name).read_text()
         assert re.search(r"FRED_API_KEY:\s*\$\{\{\s*secrets\.FRED_API_KEY\s*\}\}", text), name
         assert not re.search(r"\b[a-f0-9]{32}\b", text), f"{name} must never contain a key"
+
+
+def test_the_window_is_committed_not_read_from_the_environment(monkeypatch):
+    # Two people with different .env files who build the same commit must get
+    # the same bytes: the environment cannot move the window.
+    monkeypatch.setenv("START_DATE", "2020-01-01")
+    monkeypatch.setenv("END_DATE", "2020-12-31")
+    reloaded = importlib.reload(settings)
+    assert reloaded.START_DATE == "1976-06-01"  # the first day of the 2-year yield
+    assert reloaded.END_DATE != "2020-12-31"
+    assert pd.Timestamp(reloaded.START_DATE) < pd.Timestamp(reloaded.END_DATE)
+    text = (ROOT / ".github" / "workflows" / "backfill.yml").read_text()
+    assert "inputs:" not in text and "START_DATE:" not in text, "the backfill takes the committed window, not an input"
