@@ -33,7 +33,7 @@ def merge_history(history, new_rows):
 def check_history(history, today=None):
     """Return a list of problems; an empty list means the history may be published.
 
-    These are data checks, not unit tests: they run on every update and stop
+    These are plausibility checks, not unit tests: they run on every update and stop
     the run before a bad number reaches the site. Yesterday's page stays up.
     """
     today = pd.Timestamp(today or date.today())
