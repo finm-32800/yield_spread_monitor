@@ -1,0 +1,19 @@
+[project]
+name = "Yield Spread Monitor (history)"
+description = "The 10-year minus 2-year Treasury yield spread, one row per business day since June 1976, recorded by the monitor's daily workflow."
+maintainer = "Jeremiah Bejarano"
+contributors = ["Jeremiah Bejarano"]
+repo_url = "https://github.com/finm-32800/yield_spread_monitor"
+os_compatibility = ["Windows", "Linux", "macOS"]
+
+[dataframes.spread_history]
+name = "10-Year Minus 2-Year Treasury Spread"
+description = "Daily 10-year minus 2-year Treasury yield spread, in percentage points, from FRED's DGS10 and DGS2."
+sources = ["FRED"]
+providers = ["Federal Reserve Bank of St. Louis"]
+provider_links = ["https://fred.stlouisfed.org/"]
+tags = ["Rates", "Treasury"]
+pull_method = "FRED API, src/pull_yields.py on main, run daily by GitHub Actions"
+path = "spread_history.csv"
+date_col = "date"
+docs = "Two columns: date, and spread (DGS10 minus DGS2, in percentage points). The daily workflow on main appends one row each business day; nothing else writes this branch."
